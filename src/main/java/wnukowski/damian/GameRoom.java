@@ -1,4 +1,7 @@
-package wnukowski.damian.server;
+package wnukowski.damian;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -6,15 +9,19 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class GameRoom {
+    private final static Logger log = LoggerFactory.getLogger(GameRoom.class);
     private LocalDateTime lastTimeUpdate = LocalDateTime.now();
-    private UUID roomUUID;
-    private UUID whiteUUID;
-    private UUID blackUUID;
-    private long whiteMilliseconds = 1000 * 10;
-    private long blackMilliseconds = 1000 * 10;
+    private final UUID roomUUID;
+    private final UUID whiteUUID;
+    private final UUID blackUUID;
+    private long whiteMilliseconds = 1000 * 10 * 60;
+    private long blackMilliseconds = 1000 * 10 * 60;
     private Color currentTurn = Color.WHITE;
     private boolean whiteWantsDraw = false;
     private boolean blackWantsDraw = false;
+    private boolean gameStarted = false;
+    private boolean whiteInTheRoom = false;
+    private boolean blackInTheRoom = false;
 
     //b - indicates black piece, w indicates white pieces, W and B indicates queens of their colour
     private final char[][] board = {
@@ -33,6 +40,80 @@ public class GameRoom {
         roomUUID = UUID.randomUUID();
         whiteUUID = UUID.randomUUID();
         blackUUID = UUID.randomUUID();
+        ServerState.gameRooms.put(this.roomUUID, this);
+        log.debug("Creating room from memory");
+    }
+
+    public synchronized boolean join(UUID roomUUID, UUID colorUUID) {
+        if (!roomUUID.equals(this.roomUUID)) {
+            return false;
+        }
+
+        if (colorUUID.equals(whiteUUID) && !whiteInTheRoom) {
+            whiteInTheRoom = true;
+            if (blackInTheRoom && !gameStarted) {
+                gameStarted = true;
+            }
+            return true;
+        }
+        if (colorUUID.equals(blackUUID) && !blackInTheRoom) {
+            blackInTheRoom = true;
+            if (whiteInTheRoom && !gameStarted) {
+                gameStarted = true;
+            }
+            return true;
+        }
+        return false;  // no color uuid match
+    }
+
+    public synchronized void leave(UUID colorUUID) {
+        if (colorUUID.equals(whiteUUID)) {
+            whiteInTheRoom = false;
+        }
+        if (colorUUID.equals(blackUUID)) {
+            blackInTheRoom = false;
+        }
+        if (!blackInTheRoom && !whiteInTheRoom) {
+            // remove room from memory if both players leave
+            log.debug("Deleting room from memory");
+            ServerState.gameRooms.remove(this.getRoomUUID());
+        }
+    }
+
+    public synchronized boolean requestADraw(UUID colorUUID) {
+        Color color = getColorForUUID(colorUUID);
+        if (color.equals(Color.BLACK) && blackWantsDraw) {
+            return false;
+        }
+        if (color.equals(Color.WHITE) && whiteWantsDraw) {
+            return false;
+        }
+
+        if (color.equals(Color.BLACK)) {
+            blackWantsDraw = true;
+        } else {
+            whiteWantsDraw = true;
+        }
+        return true;
+    }
+
+    public synchronized boolean cancelDrawRequest(UUID colorUUID) {
+        Color color = getColorForUUID(colorUUID);
+        if (whiteWantsDraw && blackWantsDraw) {
+            return false; // already draw
+        }
+
+        if (color.equals(Color.BLACK) && blackWantsDraw) {
+            blackWantsDraw = false;
+            return true;
+        }
+
+        if (color.equals(Color.WHITE) && whiteWantsDraw) {
+            whiteWantsDraw = false;
+            return true;
+        }
+
+        return false;
     }
 
     public synchronized long getWhiteMilliseconds() {
@@ -49,7 +130,33 @@ public class GameRoom {
         return currentTurn;
     }
 
+    public synchronized String getWholeRoomStateAsString() {
+        StringBuilder sb = new StringBuilder();
+        updateTime();
+        sb.append("STATE=").append(getGameState())
+                .append(" PLAYER_TURN=").append(currentTurn.toString())
+                .append(" WHITE_WANTS_DRAW=").append(whiteWantsDraw ? "TRUE" : "FALSE")
+                .append(" BLACK_WANTS_DRAW=").append(blackWantsDraw ? "TRUE" : "FALSE")
+                .append(" BLACK_TIME=").append(blackMilliseconds)
+                .append(" WHITE_TIME=").append(whiteMilliseconds)
+                .append(" WHITE_ONLINE=").append(whiteInTheRoom ? "TRUE" : "FALSE")
+                .append(" BLACK_ONLINE=").append(blackInTheRoom ? "TRUE" : "FALSE")
+                .append(" BOARD=");
+
+        for (char[] chars : board) {
+            for (char chr: chars) {
+                sb.append(chr);
+            }
+        }
+
+        return sb.toString();
+    }
+
     public synchronized State getGameState() {
+        if (!gameStarted) {
+            return State.WAITING;
+        }
+
         if (whiteWantsDraw && blackWantsDraw) {
             return State.DRAW;
         }
@@ -69,7 +176,9 @@ public class GameRoom {
      * @param commandsStrings list of commands in format [a-h][1-8] where first is chosen piece.
      * @return true if validation passed, false otherwise
      */
-    public synchronized boolean move(List<String> commandsStrings, Color movingPlayer) {
+    public synchronized boolean move(List<String> commandsStrings, UUID colorUUID) {
+        Color movingPlayer = getColorForUUID(colorUUID);
+
         if (!getGameState().equals(State.PLAYING)) {
             return false;
         }
@@ -108,28 +217,27 @@ public class GameRoom {
         return validationResult;
     }
 
-    public synchronized UUID getRoomUUID() {
-        return roomUUID;
-    }
 
-    public synchronized void setRoomUUID(UUID roomUUID) {
-        this.roomUUID = roomUUID;
-    }
 
     public synchronized UUID getWhiteUUID() {
         return whiteUUID;
-    }
-
-    public synchronized void setWhiteUUID(UUID whiteUUID) {
-        this.whiteUUID = whiteUUID;
     }
 
     public synchronized UUID getBlackUUID() {
         return blackUUID;
     }
 
-    public synchronized void setBlackUUID(UUID blackUUID) {
-        this.blackUUID = blackUUID;
+    public synchronized UUID getRoomUUID() {
+        return roomUUID;
+    }
+
+    private Color getColorForUUID(UUID colorUUID) {
+        Color movingPlayer = colorUUID.equals(whiteUUID) ? Color.WHITE
+                : colorUUID.equals(blackUUID) ? Color.BLACK : null;
+        if (movingPlayer == null) {
+            throw new IllegalArgumentException("Color uuid stored in user state is invalid!");
+        }
+        return movingPlayer;
     }
 
     /**
@@ -293,12 +401,17 @@ public class GameRoom {
 
     // SHOULD BE ALWAYS CALLED BEFORE TURN CHANGE!!!
     private void updateTime() {
+        if (!gameStarted) {
+            return;
+        }
         long millisPassed = Duration.between(lastTimeUpdate, LocalDateTime.now()).toMillis();
         if (currentTurn.equals(Color.WHITE)) {
             whiteMilliseconds -= millisPassed;
         } else {
             blackMilliseconds -= millisPassed;
         }
+
+        lastTimeUpdate = LocalDateTime.now();
 
         // Don't store negative time
         blackMilliseconds = Math.max(blackMilliseconds, 0);
@@ -328,6 +441,6 @@ public class GameRoom {
     }
 
     public enum State {
-        PLAYING, DRAW, WHITE_WON, BLACK_WON
+        WAITING, PLAYING, DRAW, WHITE_WON, BLACK_WON
     }
 }
