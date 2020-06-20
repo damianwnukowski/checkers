@@ -29,6 +29,12 @@ public class GameRoom {
             //  a   b   c   d   e   f   g   h
     };
 
+    public GameRoom() {
+        roomUUID = UUID.randomUUID();
+        whiteUUID = UUID.randomUUID();
+        blackUUID = UUID.randomUUID();
+    }
+
     public synchronized long getWhiteMilliseconds() {
         updateTime();
         return whiteMilliseconds;
@@ -100,6 +106,30 @@ public class GameRoom {
         }
 
         return validationResult;
+    }
+
+    public synchronized UUID getRoomUUID() {
+        return roomUUID;
+    }
+
+    public synchronized void setRoomUUID(UUID roomUUID) {
+        this.roomUUID = roomUUID;
+    }
+
+    public synchronized UUID getWhiteUUID() {
+        return whiteUUID;
+    }
+
+    public synchronized void setWhiteUUID(UUID whiteUUID) {
+        this.whiteUUID = whiteUUID;
+    }
+
+    public synchronized UUID getBlackUUID() {
+        return blackUUID;
+    }
+
+    public synchronized void setBlackUUID(UUID blackUUID) {
+        this.blackUUID = blackUUID;
     }
 
     /**
