@@ -1,8 +1,8 @@
-Protokół przedstawiający warcaby w wersji angielskiej.
+Protocol of checkers in english version.
 
-Zasady gry:
+Rules:
 
-`Move rules
+Move rules
 
 There are two different ways to move in English draughts:
 
@@ -13,5 +13,5 @@ Multiple jumps are possible, if after one jump, anotgither piece is immediately 
 Kings
 `If a man moves into the kings row on the opponent's side of the board, it is crowned as a king and gains the ability to move both forward and backward. If a man moves into the kings row or if it jumps into the kings row, the current move terminates; the piece is crowned as a king but cannot jump back out as in a multi-jump, until another move. 
     
-(Źródło: https://en.wikipedia.org/wiki/English_draughts#Starting_position)
+(Source: https://en.wikipedia.org/wiki/English_draughts#Starting_position)
 
